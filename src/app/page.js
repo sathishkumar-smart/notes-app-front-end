@@ -1,103 +1,163 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import NotesGrid from "../components/organisms/NotesGrid";
+import NoteModal from "../components/organisms/NoteModal";
+import IconButton from "../components/atoms/IconButton";
+import axiosInstance from "../lib/axios";
+import Head from "next/head";
+
+
+/**
+ * HomePage Component
+ * - Shows all notes for the logged-in user
+ * - Allows creating, editing, deleting notes
+ * - Fetches user info from /auth/me
+ * - All API calls send JWT token in Authorization header
+ */
+export default function HomePage() {
+  const [notes, setNotes] = useState([]);       // List of notes
+  const [modalOpen, setModalOpen] = useState(false); // Controls Note Modal
+  const [editNote, setEditNote] = useState(null);    // Note being edited
+  const [user, setUser] = useState(null);            // Current user info
+  const router = useRouter();
+
+  /**
+   * Fetch current logged-in user
+   * - Redirects to login if token missing or invalid
+   */
+  const fetchUser = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return router.push("/auth/login");
+
+      const res = await axiosInstance.get("/auth/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUser(res.data);
+    } catch (err) {
+      console.error("Error fetching user:", err);
+      localStorage.removeItem("access_token");
+      router.push("/auth/login");
+    }
+  };
+
+  /**
+   * Fetch all notes for the logged-in user
+   */
+  const fetchNotes = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      const res = await axiosInstance.get("/notes/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setNotes(res.data);
+    } catch (err) {
+      console.error("Error fetching notes:", err);
+    }
+  };
+
+  /**
+   * Save or update a note
+   * - If note_id exists → update
+   * - Else → create
+   */
+  const handleSaveNote = async (note) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return router.push("/auth/login");
+
+      let res;
+      if (note.note_id) {
+        res = await axiosInstance.put(`/notes/${note.note_id}`, note, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setNotes((prev) =>
+          prev.map((n) => (n.note_id === note.note_id ? res.data : n))
+        );
+      } else {
+        res = await axiosInstance.post("/notes/", note, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setNotes((prev) => [...prev, res.data]);
+      }
+
+      setModalOpen(false); // Close modal after save
+    } catch (err) {
+      console.error("Error saving note:", err);
+      alert("Failed to save note");
+    }
+  };
+
+  /**
+   * Delete a note by ID
+   */
+  const handleDeleteNote = async (id) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return router.push("/auth/login");
+
+      await axiosInstance.delete(`/notes/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setNotes((prev) => prev.filter((n) => n.note_id !== id));
+    } catch (err) {
+      console.error("Error deleting note:", err);
+      alert("Failed to delete note");
+    }
+  };
+
+  // Fetch user and notes on component mount
+  useEffect(() => {
+    fetchUser();
+    fetchNotes();
+  }, []);
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div>
+       <Head>
+        <title>Keep Notes - Your Personal Notes App</title>
+        <meta name="description" content="Create, edit, and manage notes securely with Keep Notes." />
+        <meta property="og:title" content="Keep Notes App" />
+        <meta property="og:description" content="Organize your notes efficiently and visually." />
+        <meta name="keywords" content="notes, productivity, fastapi, nextjs, tailwind" />
+      </Head>
+      
+      {/* Welcome message */}
+      <h2 className="text-2xl font-bold mb-4">
+        Welcome, {user ? user.user_name : "Guest"}
+      </h2>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      {/* Notes Grid */}
+      <NotesGrid
+        notes={notes}
+        onEdit={(note) => {
+          setEditNote(note);
+          setModalOpen(true);
+        }}
+        onDelete={handleDeleteNote}
+      />
+
+      {/* Floating Add Note Button */}
+      <IconButton
+        onClick={() => {
+          setEditNote(null);
+          setModalOpen(true);
+        }}
+      >
+        +
+      </IconButton>
+
+      {/* Note Modal */}
+      <NoteModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSave={handleSaveNote}
+        initialData={editNote}
+      />
     </div>
   );
 }
